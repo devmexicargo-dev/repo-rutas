@@ -6,21 +6,26 @@ from auth import get_current_user
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 from google_maps import get_time_matrix
 from optimizer import optimize_routes
 from storage import guardar_rutas_excel
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 
 # =========================
-# ⏱️ UTILIDADES DE TIEMPO
+# ⏱️ CONFIGURACIÓN TIEMPOS
 # =========================
 
-def segundos_a_hora(segundos, inicio_jornada=6):
-    base = timedelta(hours=inicio_jornada)
-    return str(base + timedelta(seconds=segundos))[:-3]
+HORA_INICIO = 6 * 60 * 60      # 06:00 AM en segundos
+BUFFER_REALISTA = 1.10        # +10% buffer realista
+MAX_PARADAS_POR_MAPA = 10      # 🔥 para dividir enlaces largos
+
+
+def segundos_a_hora(segundos):
+    horas = segundos // 3600
+    minutos = (segundos % 3600) // 60
+    return f"{int(horas):02d}:{int(minutos):02d}"
 
 
 def franja_a_segundos(valor: str):
@@ -31,35 +36,13 @@ def franja_a_segundos(valor: str):
     return (6 * 60 * 60, 23 * 60 * 60)
 
 
-def analizar_no_visitada(direccion, franja, espera_min):
-    causas = []
-    sugerencias = []
-
-    if franja != "all":
-        causas.append("Franja horaria restrictiva")
-        sugerencias.append("Probar ampliar la franja a 'Todo el día'")
-
-    if espera_min > 10:
-        causas.append("Tiempo de espera elevado")
-        sugerencias.append("Reducir el tiempo de espera (5–10 minutos)")
-
-    if not causas:
-        causas.append("Conflicto con otras paradas")
-        sugerencias.append("Mover esta parada a otra ruta o dividir la jornada")
-
-    return {
-        "direccion": direccion,
-        "causas": causas,
-        "sugerencias": sugerencias
-    }
-
-
 # =========================
 # 🚀 APP
 # =========================
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 app.state.GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 templates = Jinja2Templates(directory="templates")
 
@@ -80,7 +63,7 @@ def optimize(
     acopio: str = Form(...),
     vehiculos: int = Form(...),
 
-    # Direcciones (hasta 19)
+    # Direcciones
     direccion1: str = Form(""), direccion2: str = Form(""),
     direccion3: str = Form(""), direccion4: str = Form(""),
     direccion5: str = Form(""), direccion6: str = Form(""),
@@ -116,8 +99,6 @@ def optimize(
     espera17: int = Form(5), espera18: int = Form(5),
     espera19: int = Form(5),
 ):
-    print("Ruta creada por:", user)
-
     direcciones = [
         direccion1, direccion2, direccion3, direccion4, direccion5,
         direccion6, direccion7, direccion8, direccion9, direccion10,
@@ -127,17 +108,6 @@ def optimize(
     direcciones = [d for d in direcciones if d.strip()]
     addresses = [acopio] + direcciones
 
-    franjas = [
-        franja1, franja2, franja3, franja4, franja5,
-        franja6, franja7, franja8, franja9, franja10,
-        franja11, franja12, franja13, franja14, franja15,
-        franja16, franja17, franja18, franja19
-    ]
-
-    time_windows = [(0, 23 * 60 * 60)]
-    for f in franjas[:len(direcciones)]:
-        time_windows.append(franja_a_segundos(f))
-
     esperas = [
         espera1, espera2, espera3, espera4, espera5,
         espera6, espera7, espera8, espera9, espera10,
@@ -146,6 +116,8 @@ def optimize(
     ][:len(direcciones)]
 
     service_times = [0] + [e * 60 for e in esperas]
+
+    time_windows = [(0, 23 * 60 * 60)] * len(addresses)
 
     time_matrix = get_time_matrix(addresses)
 
@@ -162,34 +134,50 @@ def optimize(
             {"request": request, "error": "No fue posible generar una ruta válida."}
         )
 
-    rutas_idx = resultado["routes"]
-    no_visitadas_idx = resultado["unserved"]
-
     rutas = []
-    vehiculo_visible = 1
-    MAX_PARADAS_POR_MAPA = 8
 
-    for ruta in rutas_idx:
+    for v_id, ruta in enumerate(resultado["routes"], start=1):
         if len(ruta) <= 2:
             continue
 
+        tiempo_actual = HORA_INICIO
         paradas = []
-        for paso in ruta:
+
+        for i, paso in enumerate(ruta):
             idx = paso["node"]
+
+            if i == 0:
+                llegada = tiempo_actual
+                espera = 0
+            else:
+                prev_idx = ruta[i - 1]["node"]
+                viaje = int(time_matrix[prev_idx][idx] * BUFFER_REALISTA)
+                tiempo_actual += viaje
+                llegada = tiempo_actual
+                espera = paso["service"]
+
+            salida = llegada + espera
+            tiempo_actual = salida
+
             paradas.append({
                 "direccion": addresses[idx],
-                "llegada": segundos_a_hora(paso["arrival"]),
-                "espera": paso["service"] // 60,
-                "salida": segundos_a_hora(paso["arrival"] + paso["service"])
+                "llegada": segundos_a_hora(llegada),
+                "espera": espera // 60,
+                "salida": segundos_a_hora(salida)
             })
 
+        # 🔥 GENERAR TRAMOS GOOGLE MAPS
         mapas = []
         inicio = 0
+
         while inicio < len(paradas) - 1:
             fin = min(inicio + MAX_PARADAS_POR_MAPA, len(paradas))
             tramo = paradas[inicio:fin]
 
-            encoded = [urllib.parse.quote(p["direccion"]) for p in tramo]
+            encoded = [
+                urllib.parse.quote(p["direccion"])
+                for p in tramo
+            ]
 
             mapas.append({
                 "tramo": len(mapas) + 1,
@@ -201,31 +189,10 @@ def optimize(
             inicio = fin - 1
 
         rutas.append({
-            "vehiculo": vehiculo_visible,
+            "vehiculo": v_id,
             "paradas": paradas,
-            "mapas": mapas
+            "mapas": mapas   # 👈 AQUI ESTABA FALTANDO
         })
-
-        vehiculo_visible += 1
-
-    no_visitadas = []
-    sugerencias = []
-
-    for idx in no_visitadas_idx:
-        parada = {
-            "direccion": addresses[idx],
-            "franja": franjas[idx - 1],
-            "espera": esperas[idx - 1]
-        }
-
-        no_visitadas.append(parada)
-        sugerencias.append(
-            analizar_no_visitada(
-                parada["direccion"],
-                parada["franja"],
-                parada["espera"]
-            )
-        )
 
     guardar_rutas_excel(rutas, user)
 
@@ -234,8 +201,8 @@ def optimize(
         {
             "request": request,
             "rutas": rutas,
-            "no_visitadas": no_visitadas,
-            "sugerencias": sugerencias
+            "no_visitadas": [],
+            "sugerencias": []
         }
     )
 
@@ -249,98 +216,4 @@ def download_excel(user: str = Depends(get_current_user)):
         path=file_path,
         filename="historial_rutas.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-
-@app.post("/reoptimize", response_class=HTMLResponse)
-def reoptimize(
-    request: Request,
-    user: str = Depends(get_current_user),
-
-    acopio: str = Form(...),
-    vehiculos: int = Form(...),
-
-    direccion_all: list[str] = Form(...),
-    franja_all: list[str] = Form(...),
-    espera_all: list[int] = Form(...),
-
-    direccion_no: list[str] = Form(...)
-):
-    """
-    Reoptimiza SOLO las paradas no atendidas
-    sin modificar las paradas válidas
-    """
-
-    # 🧱 Reconstruimos estructura original
-    addresses = [acopio]
-    time_windows = [(0, 23 * 60 * 60)]
-    service_times = [0]
-
-    # 🔹 Paradas originales (NO se tocan)
-    for direccion, franja, espera in zip(direccion_all, franja_all, espera_all):
-        addresses.append(direccion)
-        time_windows.append(franja_a_segundos(franja))
-        service_times.append(espera * 60)
-
-    # 🔥 Paradas NO incluidas (REOPTIMIZADAS)
-    for direccion in direccion_no:
-        addresses.append(direccion)
-        time_windows.append((0, 23 * 60 * 60))   # todo el día
-        service_times.append(5 * 60)             # 5 min
-
-    # ⚠️ SIN Google → modo mock o cache
-    time_matrix = get_time_matrix(addresses)
-
-    resultado = optimize_routes(
-        time_matrix,
-        time_windows,
-        service_times,
-        vehiculos
-    )
-
-    if resultado is None:
-        return templates.TemplateResponse(
-            "result.html",
-            {
-                "request": request,
-                "error": "No fue posible reoptimizar las paradas."
-            }
-        )
-
-    rutas_idx = resultado["routes"]
-
-    rutas = []
-    vehiculo_visible = 1
-
-    for ruta in rutas_idx:
-        if len(ruta) <= 2:
-            continue
-
-        paradas = []
-        for paso in ruta:
-            idx = paso["node"]
-            paradas.append({
-                "direccion": addresses[idx],
-                "llegada": segundos_a_hora(paso["arrival"]),
-                "espera": paso["service"] // 60,
-                "salida": segundos_a_hora(paso["arrival"] + paso["service"])
-            })
-
-        rutas.append({
-            "vehiculo": vehiculo_visible,
-            "paradas": paradas
-        })
-
-        vehiculo_visible += 1
-
-    guardar_rutas_excel(rutas, user)
-
-    return templates.TemplateResponse(
-        "result.html",
-        {
-            "request": request,
-            "rutas": rutas,
-            "no_visitadas": [],
-            "sugerencias": []
-        }
     )

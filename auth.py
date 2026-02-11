@@ -1,19 +1,24 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
+import json
+from pathlib import Path
 
 security = HTTPBasic()
 
-# 👤 Usuarios definidos en código
-USERS = {
-    "asesor1": "clave123",
-    "asesor2": "clave456",
-    "admin": "admin123"
-}
+# Ruta del archivo users.json
+BASE_DIR = Path(__file__).resolve().parent
+USERS_FILE = BASE_DIR / "users.json"
 
-def get_current_user(
-    credentials: HTTPBasicCredentials = Depends(security)
-):
+def load_users():
+    if not USERS_FILE.exists():
+        raise RuntimeError("users.json no encontrado")
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    USERS = load_users()
+
     correct_password = USERS.get(credentials.username)
 
     if not correct_password or not secrets.compare_digest(

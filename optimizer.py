@@ -12,19 +12,16 @@ def optimize_routes(
 
     num_locations = len(time_matrix)
 
-    starts = [0] * num_vehicles
-    ends = [0] * num_vehicles
-
     manager = pywrapcp.RoutingIndexManager(
         num_locations,
         num_vehicles,
-        starts,
-        ends
+        [0] * num_vehicles,
+        [0] * num_vehicles
     )
 
     routing = pywrapcp.RoutingModel(manager)
 
-    # 🔥 TIEMPO CON BUFFER APLICADO EN EL SOLVER
+    # 🔥 TIEMPO CON BUFFER
     def time_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
@@ -55,12 +52,12 @@ def optimize_routes(
             PENALTY
         )
 
-    # Ventanas horarias
+    # Ventanas
     for node, window in enumerate(time_windows):
         index = manager.NodeToIndex(node)
         time_dimension.CumulVar(index).SetRange(window[0], window[1])
 
-    # 🔥 Hora real de salida
+    # Hora exacta salida
     for vehicle_id in range(num_vehicles):
         start_index = routing.Start(vehicle_id)
         time_dimension.CumulVar(start_index).SetRange(start_time, start_time)
@@ -107,11 +104,10 @@ def optimize_routes(
 
         visited_nodes.add(node)
 
-    unserved = []
-
-    for node in range(1, num_locations):
-        if node not in visited_nodes:
-            unserved.append(node)
+    unserved = [
+        node for node in range(1, num_locations)
+        if node not in visited_nodes
+    ]
 
     return {
         "routes": routes,

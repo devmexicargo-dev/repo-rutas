@@ -139,45 +139,17 @@ li {
 
 {% if no_visitadas %}
 <hr>
-
 <h3>❌ Paradas NO incluidas</h3>
 <ul>
 {% for p in no_visitadas %}
     <li class="no-visitada">
-        {{ p.direccion }} |
-        Franja: {{ p.franja }} |
-        Espera: {{ p.espera }} min
+        {{ p.direccion }}
     </li>
 {% endfor %}
 </ul>
-
-<h3>💡 Sugerencias automáticas</h3>
-<ul>
-{% for s in sugerencias %}
-    <li class="no-visitada">
-        <strong>{{ s.direccion }}</strong>
-        <ul>
-        {% for tip in s.sugerencias %}
-            <li>👉 {{ tip }}</li>
-        {% endfor %}
-        </ul>
-    </li>
-{% endfor %}
-</ul>
-
-<form method="post" action="/reoptimize">
-    <input type="hidden" name="acopio" value="{{ rutas[0].paradas[0].direccion }}">
-    <input type="hidden" name="vehiculos" value="{{ rutas|length }}">
-
-    {% for p in no_visitadas %}
-        <input type="hidden" name="direccion_no" value="{{ p.direccion }}">
-    {% endfor %}
-
-    <button type="submit" class="btn btn-optimizar">
-        🔄 Reoptimizar usando sugerencias
-    </button>
-</form>
 {% endif %}
+</ul>
+
 
 <a href="/">← Volver</a>
 

@@ -1,7 +1,7 @@
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 
-def optimize_routes(time_matrix, time_windows, service_times, num_vehicles):
+def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, start_time):
     """
     Optimiza rutas considerando:
     - Acopio como inicio y fin (nodo 0)
@@ -61,9 +61,9 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles):
     # =========================
     routing.AddDimension(
         transit_callback_index,
-        6 * 60 * 60,      # ⏳ slack: hasta 6h de espera acumulada
-        17 * 60 * 60,     # ⏱️ jornada máxima por vehículo (17h)
-        False,            # NO forzar inicio en 0
+        12 * 60 * 60,      # slack permitido
+        24 * 60 * 60,      # horizonte máximo 24h
+        False,
         "Time"
     )
 
@@ -93,9 +93,11 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles):
     # Aplicar también al inicio de cada vehículo (acopio)
     for vehicle_id in range(num_vehicles):
         start_index = routing.Start(vehicle_id)
+
+        # 🔥 FORZAR hora de salida real
         time_dimension.CumulVar(start_index).SetRange(
-            time_windows[0][0],
-            time_windows[0][1]
+            start_time,
+            start_time
         )
 
     # =========================

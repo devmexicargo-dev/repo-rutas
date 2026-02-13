@@ -1,159 +1,147 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Optimización de rutas</title>
+<meta charset="UTF-8">
+<title>Optimización de Rutas</title>
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: auto;
-        }
+<style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 1200px;
+    margin: auto;
+}
 
-        h2 { margin-bottom: 20px; }
+h2 { margin-bottom: 20px; }
 
-        label { font-weight: bold; }
+label { font-weight: bold; }
 
-        input, select {
-            height: 38px;
-            padding: 6px 8px;
-            font-size: 14px;
-            box-sizing: border-box;
-        }
+input, select {
+    height: 38px;
+    padding: 6px 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
 
-        /* Vehículos */
-        .vehiculos-select {
-            width: 180px;
-            margin-bottom: 20px;
-        }
+/* Vehículos */
+.vehiculos-select {
+    width: 180px;
+    margin-bottom: 20px;
+}
 
-        /* Grid */
-        .tabla-rutas {
-            display: grid;
-            grid-template-columns: 3fr 1.4fr 100px;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 8px;
-        }
+/* Grid */
+.tabla-rutas {
+    display: grid;
+    grid-template-columns: 3fr 140px 140px 100px;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+}
 
-        .header {
-            font-weight: bold;
-            background: #f1f1f1;
-            padding: 8px;
-            border-radius: 4px;
-        }
+.header {
+    font-weight: bold;
+    background: #f1f1f1;
+    padding: 8px;
+    border-radius: 4px;
+}
 
-        /* Botones */
-        .btn {
-            padding: 10px 14px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-        }
+/* Botones */
+.btn {
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+}
 
-        .btn-add {
-            background: #007bff;
-            color: white;
-            margin-bottom: 15px;
-        }
+.btn-add {
+    background: #007bff;
+    color: white;
+    margin-bottom: 15px;
+}
 
-        .btn-add:hover {
-            background: #0056b3;
-        }
+.btn-add:hover {
+    background: #0056b3;
+}
 
-        .btn-optimizar {
-            margin-top: 30px;
-            width: 100%;
-            padding: 18px;
-            font-size: 18px;
-            background: linear-gradient(135deg, #1d6f42, #28a745);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        }
+.btn-optimizar {
+    margin-top: 30px;
+    width: 100%;
+    padding: 18px;
+    font-size: 18px;
+    background: linear-gradient(135deg, #1d6f42, #28a745);
+    color: white;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
 
-        .btn-optimizar:hover {
-            background: linear-gradient(135deg, #155d34, #218838);
-        }
+.btn-optimizar:hover {
+    background: linear-gradient(135deg, #155d34, #218838);
+}
 
-        small { color: #555; }
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+}
 
-        .header-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-        }
-
-        .logo {
-            height: 55px;
-            object-fit: contain;
-        }
-
-    </style>
+.logo {
+    height: 90px;
+}
+</style>
 </head>
 
 <body>
 
-    <div class="header-top">
-        <h2>Optimización de Rutas</h2>
-
-        <img
-            src="/static/Mexicargo_Logo.png"
-            alt="Mexicargo"
-            style="height:100px"
-            class="logo"
-        >
-    </div>
+<div class="header-top">
+    <h2>Optimización de Rutas</h2>
+    <img src="/static/Mexicargo_Logo.png" class="logo">
+</div>
 
 <form method="post" action="/optimize">
 
-    <!-- VEHÍCULOS -->
-    <label>Número de vehículos</label><br>
-    <select name="vehiculos" class="vehiculos-select">
-        <option value="1">1 vehículo</option>
-        <option value="2">2 vehículos</option>
-        <option value="3">3 vehículos</option>
-    </select>
-    <br>
+<!-- VEHÍCULOS -->
+<label>Número de vehículos</label><br>
+<select name="vehiculos" class="vehiculos-select">
+    <option value="1">1 vehículo</option>
+    <option value="2">2 vehículos</option>
+    <option value="3">3 vehículos</option>
+</select>
 
-    <!-- ACOPIO -->
-    <label>Dirección de acopio</label>
-    <div class="tabla-rutas">
-        <input type="text" name="acopio"
-               value="107 Cedar Ave, Egg Harbor Township, NJ" required>
-        <div></div>
-        <div></div>
-    </div>
+<br><br>
 
-    <!-- HEADERS -->
-    <div class="tabla-rutas">
-        <div class="header">📍 Dirección</div>
-        <div class="header">⏰ Franja horaria</div>
-        <div class="header">⏳ Espera</div>
-    </div>
+<!-- ACOPIO + HORA SALIDA -->
+<label>Dirección de acopio</label>
+<div class="tabla-rutas">
+    <input type="text" name="acopio"
+           value="107 Cedar Ave, Egg Harbor Township, NJ" required>
 
-    <!-- CONTENEDOR DINÁMICO -->
-    <div id="contenedor-direcciones"></div>
+    <label style="text-align:right;">Hora salida:</label>
+    <input type="time" name="hora_salida" value="06:00" required>
 
-    <button type="button" class="btn btn-add" onclick="agregarFila()">
-        ➕ Agregar dirección
-    </button>
+    <div></div>
+</div>
 
-    <br>
-    <small>Máximo 19 direcciones</small>
+<!-- HEADERS -->
+<div class="tabla-rutas">
+    <div class="header">📍 Dirección</div>
+    <div class="header">🟢 Hora inicio</div>
+    <div class="header">🔴 Hora fin</div>
+    <div class="header">⏳ Espera (min)</div>
+</div>
 
-    <button type="submit" class="btn-optimizar">
-        🚀 Optimizar ruta
-    </button>
-<hr>
-<hr>
-<hr>
+<div id="contenedor-direcciones"></div>
+
+<button type="button" class="btn btn-add" onclick="agregarFila()">
+    ➕ Agregar dirección
+</button>
+
+<button type="submit" class="btn-optimizar">
+    🚀 Optimizar ruta
+</button>
+
 </form>
 
 <script>
@@ -161,6 +149,7 @@ let contador = 0;
 const maxDirecciones = 19;
 
 function agregarFila() {
+
     if (contador >= maxDirecciones) return;
 
     contador++;
@@ -169,19 +158,15 @@ function agregarFila() {
     fila.className = "tabla-rutas";
 
     fila.innerHTML = `
-        <input type="text" name="direccion${contador}" placeholder="Dirección ${contador}">
-        <select name="franja${contador}">
-            <option value="all">Todo el día</option>
-            <option value="am">AM (06:00 am – 14:00 pm)</option>
-            <option value="pm">PM (14:00 am – 23:00 pm)</option>
-        </select>
-        <input type="number" name="espera${contador}" value="5" min="1" max="60">
+        <input type="text" name="direccion" placeholder="Dirección ${contador}" required>
+        <input type="time" name="hora_inicio" value="06:00" required>
+        <input type="time" name="hora_fin" value="18:00" required>
+        <input type="number" name="espera" value="5" min="1" max="120" required>
     `;
 
     document.getElementById("contenedor-direcciones").appendChild(fila);
 }
 
-// Arranca con 1 fila visible
 agregarFila();
 </script>
 

@@ -1,34 +1,17 @@
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 
-def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, start_time):
-    """
-    Optimiza rutas considerando:
-    - Acopio como inicio y fin (nodo 0)
-    - Uno o varios vehículos
-    - Tiempo de viaje + tiempo de espera por parada
-    - Ventanas horarias por nodo
-    - Jornada máxima del vehículo
-    - Posibilidad de omitir paradas (con penalización)
-
-    Retorna:
-    {
-        "routes": [
-            [
-                {"node": int, "arrival": int, "service": int},
-                ...
-            ],
-            ...
-        ],
-        "unserved": [int, int, ...]
-    }
-    """
+def optimize_routes(
+    time_matrix,
+    time_windows,
+    service_times,
+    num_vehicles,
+    start_time,
+    buffer_realista
+):
 
     num_locations = len(time_matrix)
 
-    # =========================
-    # 🚚 INICIO / FIN
-    # =========================
     starts = [0] * num_vehicles
     ends = [0] * num_vehicles
 
@@ -41,14 +24,12 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, star
 
     routing = pywrapcp.RoutingModel(manager)
 
-    # =========================
-    # ⏱️ CALLBACK DE TIEMPO
-    # =========================
+    # 🔥 TIEMPO CON BUFFER APLICADO EN EL SOLVER
     def time_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
 
-        travel_time = time_matrix[from_node][to_node]
+        travel_time = int(time_matrix[from_node][to_node] * buffer_realista)
         service_time = service_times[from_node]
 
         return travel_time + service_time
@@ -56,23 +37,17 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, star
     transit_callback_index = routing.RegisterTransitCallback(time_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    # =========================
-    # ⏱️ DIMENSIÓN DE TIEMPO
-    # =========================
     routing.AddDimension(
         transit_callback_index,
-        12 * 60 * 60,      # slack permitido
-        24 * 60 * 60,      # horizonte máximo 24h
+        12 * 60 * 60,
+        24 * 60 * 60,
         False,
         "Time"
     )
 
     time_dimension = routing.GetDimensionOrDie("Time")
 
-    # =========================
-    # 🚫 PERMITIR OMITIR CLIENTES
-    # =========================
-    PENALTY = 10_000_000  # penalización alta
+    PENALTY = 10_000_000
 
     for node in range(1, num_locations):
         routing.AddDisjunction(
@@ -80,29 +55,16 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, star
             PENALTY
         )
 
-    # =========================
-    # 🕒 VENTANAS HORARIAS
-    # =========================
+    # Ventanas horarias
     for node, window in enumerate(time_windows):
         index = manager.NodeToIndex(node)
-        time_dimension.CumulVar(index).SetRange(
-            window[0],
-            window[1]
-        )
+        time_dimension.CumulVar(index).SetRange(window[0], window[1])
 
-    # Aplicar también al inicio de cada vehículo (acopio)
+    # 🔥 Hora real de salida
     for vehicle_id in range(num_vehicles):
         start_index = routing.Start(vehicle_id)
+        time_dimension.CumulVar(start_index).SetRange(start_time, start_time)
 
-        # 🔥 FORZAR hora de salida real
-        time_dimension.CumulVar(start_index).SetRange(
-            start_time,
-            start_time
-        )
-
-    # =========================
-    # 🔍 PARÁMETROS DE BÚSQUEDA
-    # =========================
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -117,9 +79,6 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, star
     if solution is None:
         return None
 
-    # =========================
-    # 📍 EXTRAER RUTAS
-    # =========================
     routes = [[] for _ in range(num_vehicles)]
     visited_nodes = set()
 
@@ -138,8 +97,8 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, star
             visited_nodes.add(node)
             index = solution.Value(routing.NextVar(index))
 
-        # Nodo final (acopio de regreso)
         node = manager.IndexToNode(index)
+
         routes[vehicle_id].append({
             "node": node,
             "arrival": solution.Value(time_dimension.CumulVar(index)),
@@ -148,9 +107,6 @@ def optimize_routes(time_matrix, time_windows, service_times, num_vehicles, star
 
         visited_nodes.add(node)
 
-    # =========================
-    # 🔴 PARADAS NO ATENDIDAS
-    # =========================
     unserved = []
 
     for node in range(1, num_locations):

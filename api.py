@@ -17,12 +17,11 @@ from storage import guardar_rutas_excel
 # ⏱️ CONFIGURACIÓN TIEMPOS
 # =========================
 
-BUFFER_REALISTA = 1.40        # 🔥 50% buffer
+BUFFER_REALISTA = 1.50   # 🔥 50% buffer aplicado en el solver
 MAX_PARADAS_POR_MAPA = 10
 
 
 def hora_str_a_segundos(hora_str: str) -> int:
-    """Convierte '08:30' a segundos"""
     h, m = map(int, hora_str.split(":"))
     return h * 3600 + m * 60
 
@@ -71,40 +70,28 @@ def optimize(
     espera: list[int] = Form(...),
 ):
 
-    # =========================
-    # 🔹 PREPARAR DATOS
-    # =========================
-
     HORA_INICIO = hora_str_a_segundos(hora_salida)
 
     addresses = [acopio] + direccion
-
     service_times = [0] + [e * 60 for e in espera]
 
-    # Ventanas horarias personalizadas
-    time_windows = [(0, 24 * 60 * 60)]  # acopio libre
+    # Ventanas horarias
+    time_windows = [(HORA_INICIO, 24 * 60 * 60)]
 
     for hi, hf in zip(hora_inicio, hora_fin):
         inicio = hora_str_a_segundos(hi)
         fin = hora_str_a_segundos(hf)
         time_windows.append((inicio, fin))
 
-    # =========================
-    # 🗺️ MATRIZ DE TIEMPOS
-    # =========================
-
     time_matrix = get_time_matrix(addresses)
-
-    # =========================
-    # 🔥 OPTIMIZAR
-    # =========================
 
     resultado = optimize_routes(
         time_matrix,
         time_windows,
         service_times,
         vehiculos,
-        HORA_INICIO
+        HORA_INICIO,
+        BUFFER_REALISTA
     )
 
     if resultado is None:
@@ -120,20 +107,14 @@ def optimize(
     no_visitadas = []
     sugerencias = []
 
-    # =========================
-    # 🚚 CONSTRUIR RUTAS
-    # =========================
-
     for v_id, ruta in enumerate(resultado["routes"], start=1):
 
         if len(ruta) <= 2:
             continue
 
-        tiempo_actual = HORA_INICIO
         paradas = []
 
         for paso in ruta:
-
             idx = paso["node"]
             llegada = paso["arrival"]
             espera_seg = paso["service"]
@@ -146,10 +127,7 @@ def optimize(
                 "salida": segundos_a_hora(salida)
             })
 
-        # =========================
-        # 🔗 GENERAR TRAMOS MAPS
-        # =========================
-
+        # 🔗 TRAMOS GOOGLE MAPS
         mapas = []
         inicio = 0
 
@@ -177,19 +155,11 @@ def optimize(
             "mapas": mapas
         })
 
-    # =========================
-    # 🔴 PARADAS NO ATENDIDAS
-    # =========================
-
     for idx in resultado["unserved"]:
         if idx == 0:
             continue
 
-        parada = {
-            "direccion": addresses[idx]
-        }
-
-        no_visitadas.append(parada)
+        no_visitadas.append({"direccion": addresses[idx]})
 
         sugerencias.append({
             "direccion": addresses[idx],
@@ -213,13 +183,8 @@ def optimize(
     )
 
 
-# =========================
-# 📥 DESCARGAR HISTORIAL
-# =========================
-
 @app.get("/download/excel")
 def download_excel(user: str = Depends(get_current_user)):
-
     file_path = "historial_rutas.xlsx"
 
     if not os.path.exists(file_path):
@@ -230,3 +195,96 @@ def download_excel(user: str = Depends(get_current_user)):
         filename="historial_rutas.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+# =========================
+# 🔄 REOPTIMIZAR
+# =========================
+
+@app.post("/reoptimize", response_class=HTMLResponse)
+def reoptimize(
+    request: Request,
+    user: str = Depends(get_current_user),
+
+    acopio: str = Form(...),
+    vehiculos: int = Form(...),
+
+    direccion_no: list[str] = Form(...)
+):
+
+    # 🔥 Aplicar sugerencias automáticas:
+    # - Ventana amplia
+    # - Espera mínima
+
+    hora_salida = "06:00"
+    HORA_INICIO = hora_str_a_segundos(hora_salida)
+
+    addresses = [acopio] + direccion_no
+
+    # Espera mínima sugerida
+    service_times = [0] + [10 * 60 for _ in direccion_no]
+
+    # Ventanas ampliadas
+    time_windows = [(0, 24 * 60 * 60)]
+    for _ in direccion_no:
+        time_windows.append((0, 24 * 60 * 60))
+
+    time_matrix = get_time_matrix(addresses)
+
+    resultado = optimize_routes(
+        time_matrix,
+        time_windows,
+        service_times,
+        vehiculos,
+        HORA_INICIO
+    )
+
+    if resultado is None:
+        return templates.TemplateResponse(
+            "result.html",
+            {
+                "request": request,
+                "error": "Ni ampliando ventanas fue posible optimizar."
+            }
+        )
+
+    rutas = []
+
+    for v_id, ruta in enumerate(resultado["routes"], start=1):
+
+        if len(ruta) <= 2:
+            continue
+
+        paradas = []
+
+        for paso in ruta:
+
+            idx = paso["node"]
+            llegada = paso["arrival"]
+            espera_seg = paso["service"]
+            salida = llegada + espera_seg
+
+            paradas.append({
+                "direccion": addresses[idx],
+                "llegada": segundos_a_hora(llegada),
+                "espera": espera_seg // 60,
+                "salida": segundos_a_hora(salida)
+            })
+
+        rutas.append({
+            "vehiculo": v_id,
+            "paradas": paradas,
+            "mapas": []
+        })
+
+    guardar_rutas_excel(rutas, user)
+
+    return templates.TemplateResponse(
+        "result.html",
+        {
+            "request": request,
+            "rutas": rutas,
+            "no_visitadas": [],
+            "sugerencias": []
+        }
+    )
+

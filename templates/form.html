@@ -9,6 +9,7 @@ body {
     font-family: Arial, sans-serif;
     max-width: 1200px;
     margin: auto;
+    padding: 20px;
 }
 
 h2 { margin-bottom: 20px; }
@@ -28,10 +29,10 @@ input, select {
     margin-bottom: 20px;
 }
 
-/* Grid */
+/* Grid Ajustado para 5 columnas (Dirección, Inicio, Fin, Espera, Acción) */
 .tabla-rutas {
     display: grid;
-    grid-template-columns: 3fr 140px 140px 100px;
+    grid-template-columns: 3fr 140px 140px 100px 50px;
     gap: 10px;
     align-items: center;
     margin-bottom: 8px;
@@ -61,6 +62,20 @@ input, select {
 
 .btn-add:hover {
     background: #0056b3;
+}
+
+/* Botón Eliminar */
+.btn-del {
+    background: #dc3545;
+    color: white;
+    height: 38px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.btn-del:hover {
+    background: #bd2130;
 }
 
 .btn-optimizar {
@@ -122,6 +137,7 @@ input, select {
     <input type="time" name="hora_salida" value="06:00" required>
 
     <div></div>
+    <div></div> <!-- Espacio para compensar el grid -->
 </div>
 
 <!-- HEADERS -->
@@ -130,6 +146,7 @@ input, select {
     <div class="header">🟢 Hora inicio</div>
     <div class="header">🔴 Hora fin</div>
     <div class="header">⏳ Espera (min)</div>
+    <div class="header">🗑️</div>
 </div>
 
 <div id="contenedor-direcciones"></div>
@@ -149,24 +166,40 @@ let contador = 0;
 const maxDirecciones = 19;
 
 function agregarFila() {
-
     if (contador >= maxDirecciones) return;
 
     contador++;
-
+    const contenedor = document.getElementById("contenedor-direcciones");
+    
     const fila = document.createElement("div");
     fila.className = "tabla-rutas";
+    // Asignamos un ID único para poder identificarla al borrar
+    fila.id = "fila-" + Date.now(); 
 
     fila.innerHTML = `
-        <input type="text" name="direccion" placeholder="Dirección ${contador}" required>
+        <input type="text" name="direccion" placeholder="Dirección" required>
         <input type="time" name="hora_inicio" value="06:00" required>
         <input type="time" name="hora_fin" value="18:00" required>
         <input type="number" name="espera" value="5" min="1" max="120" required>
+        <button type="button" class="btn btn-del" onclick="eliminarFila('${fila.id}')">✖</button>
     `;
 
-    document.getElementById("contenedor-direcciones").appendChild(fila);
+    contenedor.appendChild(fila);
 }
 
+function eliminarFila(idFila) {
+    const contenedor = document.getElementById("contenedor-direcciones");
+    
+    // Verificamos que haya más de una fila
+    if (contenedor.children.length > 1) {
+        const fila = document.getElementById(idFila);
+        fila.remove();
+    } else {
+        alert("Atención: Debe haber al menos una dirección en la ruta.");
+    }
+}
+
+// Inicializar con la primera fila
 agregarFila();
 </script>
 

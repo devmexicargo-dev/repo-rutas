@@ -60,7 +60,11 @@ def get_time_matrix(addresses):
                 data = json.load(f)
                 return data["matrix"]
 
-        raise e
+        try:
+            matrix = real_google_time_matrix(addresses)
+        except Exception as e:
+            print(f"Error Google Maps: {e}")
+            return fake_time_matrix(len(addresses))
 
 
 # ======================================================
